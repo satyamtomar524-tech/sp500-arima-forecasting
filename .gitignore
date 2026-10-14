@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+local_data/
+charts/
+results/*
+!results/metrics.csv
+*.html
+*.pdf
+*.pptx
