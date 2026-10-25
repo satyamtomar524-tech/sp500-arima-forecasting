@@ -1,6 +1,6 @@
 # S&P 500 forecasting: can ARIMA beat a simple baseline?
 
-An **AI-assisted academic/portfolio reconstruction** of a historical forecasting exercise, built to make the evaluation design inspectable. This is new work inspired by a short project note; the original notebook, dataset, code, and results were not available. It is not a claim of independent original coursework or employment.
+An **AI-assisted academic/portfolio reconstruction** of an academic S&P 500 forecasting exercise, built to make the evaluation design inspectable. A group presentation supplied on 25 October 2026 documents Satyam Tomar's participation in a three-person group and reports original test RMSE **712.46374** and MAE **581.8584**. These are source-reported scores from the original exercise, not independently reproduced results; they are separate from this repository's executed reconstruction backtests. The original notebook and code, exact dataset, evaluation protocol, division of individual contributions, submission and grade remain unverified. The supplied presentation remains private. This is not a claim of independently authored original coursework or employment.
 
 ## Question and method
 
