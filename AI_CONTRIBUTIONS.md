@@ -1,6 +1,6 @@
 # AI contribution and provenance
 
-This public repository is a new AI-assisted academic/portfolio reconstruction made on 14 October 2026. The original college notebook, underlying dataset, code, and results were not available. Do not present this as recovered or independently authored earlier coursework.
+This public repository is a new AI-assisted academic/portfolio reconstruction made on 14 October 2026. At that time, the original college notebook, underlying dataset, code, and results were not available. A group presentation supplied on 25 October 2026 now documents Satyam Tomar's participation in a three-person group and reports original scores. Those source-reported scores have not been independently reproduced and remain separate from this repository's executed backtests. The original notebook and code, exact dataset, evaluation protocol, division of individual contributions, submission and grade remain unverified. The presentation remains private. Do not present this reconstruction as recovered or independently authored earlier coursework.
 
 AI helped frame the research question and evaluation protocol, write and review Python and notebook code, draft explanation, and check the reproducibility and publication boundaries. Python, Pandas and Statsmodels performed the actual data audit, model fitting, forecasting and metric calculations. The user requested and reviewed this project for their portfolio; publication does not establish an original course submission or grade.
 
