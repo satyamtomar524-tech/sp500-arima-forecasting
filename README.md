@@ -1,27 +1,59 @@
-# S&P 500 forecasting: can ARIMA beat a simple baseline?
+# S&P 500 Time-Series Forecasting with ARIMA
 
-An **AI-assisted academic/portfolio reconstruction** of an academic S&P 500 forecasting exercise, built to make the evaluation design inspectable. A group presentation supplied on 25 October 2026 documents Satyam Tomar's participation in a three-person group and reports original test RMSE **712.46374** and MAE **581.8584**. These are source-reported scores from the original exercise, not independently reproduced results; they are separate from this repository's executed reconstruction backtests. The original notebook and code, exact dataset, evaluation protocol, division of individual contributions, submission and grade remain unverified. The supplied presentation remains private. This is not a claim of independently authored original coursework or employment.
+This repository contains a **later, AI-assisted Python reconstruction** of an academic group project on forecasting the S&P 500. Its purpose is simple: make the forecasting question, evaluation method, baselines, results, and limitations understandable and reproducible.
 
-## Question and method
+## Project history
 
-Can a prespecified ARIMA(1,1,1) forecast the S&P 500 daily **price-index close** better than simply carrying forward the last observed close? The target is index points, not total return or investment profit.
+A private group presentation supplied on 25 October 2026 names **Satyam Tomar as one of three group members**. It describes an S&P 500 study covering 2000–2020, with ARIMA(1,1,1), stationarity testing, differencing, and an evaluation period from 2014–2020. The presentation reports test RMSE **712.46374** and MAE **581.8584**.
 
-- Historical source: Yahoo Finance `^GSPC` daily Close, 2000–2020. The local extract is checked for missing/nonpositive closes, duplicate or out-of-order dates, and coverage against the XNYS session calendar. The calendar is a completeness proxy, not independent verification of prices.
-- Chronological split: train on 2000–2013; evaluate on 2014–2020. ARIMA(1,1,1) has no drift and is fitted on training data only. Its parameters and innovation variance remain frozen through the test.
-- Two distinct protocols: one fixed-origin forecast for the entire test path, and rolling-origin forecasts for 1, 5 and 20 observed trading sessions. Each rolling forecast is made before the target close is revealed.
-- Baselines: last observed close and a training-estimated random walk with drift. Metrics: MAE, RMSE and nominal 95% ARIMA interval coverage. Diagnostics are calculated on training data.
+Those figures are **source-reported college results**. They have not been independently reproduced because the original notebook and code, exact dataset, evaluation protocol, division of individual work, submission, and grade were not recovered. The presentation remains private.
 
-## Results from the local historical extract
+This public repository is a separate reconstruction created on 14 October 2026. It adds an explicit chronological split, simple baselines, fixed-origin and rolling-origin backtests, interval-coverage checks, and reproducibility safeguards. Its executed results must not be presented as the original group results.
 
-| Evaluation | ARIMA RMSE | Last-close RMSE | ARIMA vs. last close |
+## Research question
+
+Can a prespecified ARIMA(1,1,1) forecast the daily S&P 500 **price-index close** more accurately than simply carrying forward the last observed close?
+
+The target is measured in index points. This is a forecasting comparison, not a trading strategy, total-return analysis, or investment recommendation.
+
+## Reconstruction design
+
+- **Reference data:** 5,284 daily `^GSPC` closing observations from 2000–2020.
+- **Training period:** 2000–2013, containing 3,521 observations.
+- **Test period:** 2014–2020, containing 1,763 observations.
+- **Model:** ARIMA(1,1,1), no drift, fitted only on the training period.
+- **Evaluation:** one fixed-origin forecast and rolling-origin forecasts at 1, 5, and 20 observed trading sessions.
+- **Baselines:** last observed close and a random walk with drift estimated from the training period.
+- **Metrics:** MAE, RMSE, and nominal 95% ARIMA interval coverage.
+
+During the test period, the fitted ARIMA coefficients and innovation variance remain frozen. Each rolling forecast is produced before the target close is revealed.
+
+## Reconstruction results
+
+| Evaluation | ARIMA RMSE | Last-close RMSE | Result versus last close |
 |---|---:|---:|---:|
+| Fixed origin, full test path | 799.62 | 798.29 | 0.17% higher RMSE |
 | Rolling, 1 session | 29.17 | 29.33 | 0.55% lower RMSE |
 | Rolling, 5 sessions | 60.33 | 60.19 | 0.24% higher RMSE |
 | Rolling, 20 sessions | 123.56 | 123.51 | 0.04% higher RMSE |
 
-The small one-session advantage did **not** persist at longer horizons. One-session nominal 95% interval coverage was **83.8%** overall and **55.7%** in the descriptive 2020 slice, showing that these model-based intervals were poorly calibrated for those observations. The full aggregate metric table is in [`results/metrics.csv`](results/metrics.csv). These results describe one historical extract and protocol; they do not demonstrate a trading edge.
+Fixed-origin and rolling-origin rows answer different forecasting questions and use different information sets, so their absolute RMSE values should not be compared directly across rows.
 
-## Run it yourself
+The reconstruction's fixed-origin ARIMA MAE is **642.60**. This is separate from the presentation-reported MAE of **581.8584** because the underlying data and evaluation protocol are not established as identical.
+
+The model achieved a very small improvement for the next session, but that advantage did not continue at 5 or 20 sessions. Its nominal 95% one-session intervals covered **83.8%** of test observations and only **55.7%** in the descriptive 2020 slice, indicating that the model-based intervals were too narrow for many realised observations, especially in 2020. The fixed-origin forecast also failed to follow the sustained market rise across the full test period.
+
+The honest conclusion is that ARIMA is a useful statistical baseline here, but this experiment does **not** establish statistical superiority, a trading edge, or reliable long-horizon market prediction. Full aggregate results are available in [`results/metrics.csv`](results/metrics.csv).
+
+## Repository guide
+
+- [`analysis.py`](analysis.py) performs validation, diagnostics, forecasting, backtesting, and metric calculation.
+- [`download_data.py`](download_data.py) downloads the historical series only when run explicitly.
+- [`sp500_reconstruction.ipynb`](sp500_reconstruction.ipynb) explains the analysis step by step; published outputs are cleared.
+- [`results/metrics.csv`](results/metrics.csv) contains the reviewed aggregate metrics from the historical reference run.
+- [`AI_CONTRIBUTIONS.md`](AI_CONTRIBUTIONS.md) records how AI supported the later reconstruction.
+
+## Run it locally
 
 Use Python 3.12 and the pinned packages in [`requirements.txt`](requirements.txt):
 
@@ -32,19 +64,25 @@ python -m venv .venv
 & .\.venv\Scripts\python.exe analysis.py
 ```
 
-The download is an explicit step, never automatic. It requests a fresh historical vintage; source availability and values can change, so a new run may not exactly reproduce the local results above. `download_data.py` refuses to overwrite an existing extract. For an existing, legally obtained CSV with `Date,Close` columns, run `analysis.py --data path\to\file.csv` instead. The script writes diagnostics, forecasts, and plots locally under ignored `results/` and `charts/` paths.
+The download is never automatic, and `download_data.py` refuses to overwrite an existing extract. A fresh download may differ from the 14 October 2026 reference vintage. You can instead supply a legally obtained CSV with `Date,Close` columns:
 
-The notebook [`sp500_reconstruction.ipynb`](sp500_reconstruction.ipynb) contains the explanatory code and method. Its outputs and execution counts were cleared before publication because executed plots and tables included unlicensed market observations. Run the download and analysis script before executing the notebook in the same environment.
+```powershell
+& .\.venv\Scripts\python.exe analysis.py --data path\to\file.csv
+```
+
+Run the analysis in your own clone or working copy. It refreshes local forecast files and charts, overwrites the tracked aggregate `results/metrics.csv`, and rewrites `requirements.txt` with the versions in that environment.
 
 ## Boundaries
 
-Raw market data, detailed forecasts containing actual prices, plot arrays, and the rendered notebook are **not** included: redistribution rights for the data were not verified. The code and aggregate metrics are published for review. The calendar check does not validate each close against an independent provider; the historical extract is not verified as a contemporaneous point-in-time vintage. Model order was prespecified, not chosen after a test-set search. Overlapping 5/20-session errors, parameter uncertainty, and market regime changes limit inference.
+Raw historical closes, detailed forecasts containing actual prices, plot arrays, and executed notebook outputs are not published because redistribution rights were not verified. The calendar audit checks session coverage but does not independently verify every closing value. The historical extract is also not verified as a contemporaneous point-in-time vintage.
 
-AI helped scope the reconstruction, generate and review code and prose, and organise reproducibility checks. The numerical forecasts were calculated by the fitted statistical model. See [`AI_CONTRIBUTIONS.md`](AI_CONTRIBUTIONS.md) for the disclosure. Any academic reuse should follow the applicable course policy.
+The ARIMA order was prespecified rather than selected through a test-period search. Overlapping multi-session forecast errors, parameter uncertainty, changing market regimes, and time-varying volatility limit inference. ARIMAX, GARCH, machine-learning, LLM forecasting, and trading simulations are possible future extensions only; none was implemented in this repository.
+
+AI helped scope, code, review, explain, and verify the later reconstruction. Python, Pandas, and Statsmodels performed the calculations. Any academic reuse should follow the applicable course policy.
 
 ## Method references
 
-- [Yahoo Finance S&P 500 history](https://finance.yahoo.com/quote/%5EGSPC/history/) — historical data source; data not redistributed here.
+- [Yahoo Finance S&P 500 history](https://finance.yahoo.com/quote/%5EGSPC/history/) — historical data source; data is not redistributed here.
 - [Statsmodels ARIMA](https://www.statsmodels.org/stable/generated/statsmodels.tsa.arima.model.ARIMA.html) and [state-space forecasting](https://www.statsmodels.org/stable/examples/notebooks/generated/statespace_forecasting.html) — model and forecast protocol.
 - [Statsmodels ADF](https://www.statsmodels.org/stable/generated/statsmodels.tsa.stattools.adfuller.html) — unit-root diagnostic.
-- [exchange_calendars](https://github.com/gerrymanoim/exchange_calendars) — XNYS session proxy.
+- [exchange_calendars](https://github.com/gerrymanoim/exchange_calendars) — XNYS trading-session proxy.
