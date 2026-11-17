@@ -6,7 +6,7 @@ Do not redistribute downloaded data without resolving provider rights.
 import csv
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -42,7 +42,7 @@ def main():
     metadata = {
         "status": "NEW_RECONSTRUCTION_EXTRACT_NOT_ORIGINAL_COLLEGE_DATA",
         "provider": "Yahoo Finance", "symbol": "^GSPC", "download_url": URL,
-        "retrieved_at_utc": datetime.now(timezone.utc).isoformat(), "row_count": len(rows),
+        "retrieved_at_utc": datetime.now(UTC).isoformat(), "row_count": len(rows),
         "target": "Unadjusted Close; S&P 500 price index points, excluding dividend reinvestment",
         "licensing_status": "Open redistribution rights not verified",
         "csv_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),

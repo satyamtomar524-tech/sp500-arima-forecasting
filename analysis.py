@@ -13,10 +13,13 @@ import json
 import math
 import platform
 import warnings
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import exchange_calendars as xcals
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -26,6 +29,13 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
+
+from evaluation import (
+    block_bootstrap_rmse_gain,
+    forecast_ledger,
+    interval_quality,
+    paired_one_step_check,
+)
 
 ROOT = Path(__file__).resolve().parent
 TRAIN_END = "2013-12-31"
@@ -98,26 +108,31 @@ def fit_model(train):
 def diagnostics(train, fit, fit_warnings):
     rows = []
     for label, data in [("Training close", train), ("Training first difference", np.diff(train))]:
-        out = adfuller(data, regression="c", autolag="AIC")
+        out = adfuller(data, maxlag=None, regression="c", autolag="AIC")
         rows.append({"series": label, "statistic": float(out[0]), "p_value": float(out[1]),
-                     "lags": int(out[2]), "nobs": int(out[3]),
+                     "input_n": len(data), "regression": "c (constant)",
+                     "maxlag_argument": None,
+                     "default_maxlag_candidate": math.ceil(12 * (len(data) / 100) ** .25),
+                     "autolag": "AIC", "lags": int(out[2]), "nobs": int(out[3]),
                      "critical_5pct": float(out[4]["5%"]),
                      "null": "Unit root under regression with constant",
                      "reject_at_5pct": bool(out[1] < .05)})
     # Exclude the diffuse initial observation; burn-in can have a large residual.
     burn = max(1, int(fit.loglikelihood_burn))
     residual = np.asarray(fit.resid)[burn:]
-    lb = acorr_ljungbox(residual, lags=[10, 20], model_df=2, return_df=True)
+    model_df = 2  # ARMA component has p=1 and q=1.
+    lb = acorr_ljungbox(residual, lags=[10, 20], model_df=model_df, return_df=True)
     arch = het_arch(residual, nlags=10, ddof=2)
     return {
-        "adf": rows, "adf_settings": "constant; AIC lag selection; default maximum lag",
+        "adf": rows, "adf_settings": "constant; AIC lag selection; statsmodels default maximum lag",
         "parameters": {str(k): float(v) for k, v in zip(fit.param_names, fit.params)},
         "aic": float(fit.aic), "bic": float(fit.bic), "log_likelihood": float(fit.llf),
         "optimizer_converged": bool(fit.mle_retvals["converged"]),
         "optimizer_iterations": int(fit.mle_retvals.get("iterations", -1)),
         "warnings": fit_warnings,
         "residual_burn_excluded": burn,
-        "ljung_box": [{"lag": int(i), "statistic": float(r.lb_stat), "p_value": float(r.lb_pvalue)}
+        "ljung_box": [{"lag": int(i), "model_df": model_df, "test_df": int(i) - model_df,
+                       "statistic": float(r.lb_stat), "p_value": float(r.lb_pvalue)}
                       for i, r in lb.iterrows()],
         "arch_lm": {"lags": 10, "statistic": float(arch[0]), "p_value": float(arch[1])},
     }, residual
@@ -186,12 +201,14 @@ def calculate_metrics(fixed, rolling):
             independent = [float(actual) - float(pred) for actual, pred in zip(data.Actual, data[model])]
             assert math.isclose(mae, math.fsum(abs(e) for e in independent) / len(independent), rel_tol=1e-12)
             assert math.isclose(rmse, math.sqrt(math.fsum(e * e for e in independent) / len(independent)), rel_tol=1e-12)
-            coverage = ((data.Actual >= data.Lower95) & (data.Actual <= data.Upper95)).mean()
+            interval = interval_quality(data.Actual, data.Lower95, data.Upper95) if model == "ARIMA(1,1,1)" else None
             rows.append({"protocol": protocol, "horizon_sessions": horizon, "model": model,
                          "n": len(data), "mae_points": mae, "rmse_points": rmse,
                          "mae_improvement_vs_naive_pct": 100 * (1 - mae / naive_mae),
                          "rmse_improvement_vs_naive_pct": 100 * (1 - rmse / naive_rmse),
-                         "arima_95pct_interval_coverage_pct": 100 * float(coverage) if model == "ARIMA(1,1,1)" else None})
+                         "arima_95pct_interval_coverage_pct": interval["coverage_pct"] if interval else None,
+                         "arima_95pct_mean_width_points": interval["mean_width_points"] if interval else None,
+                         "arima_95pct_mean_winkler_score_points": interval["mean_winkler_score_points"] if interval else None})
     return pd.DataFrame(rows)
 
 
@@ -308,12 +325,36 @@ def make_charts(frame, fixed, rolling, metrics, train, residual, root):
     return annual
 
 
-def run(data_path=None, output_root=ROOT):
-    data_path = Path(data_path or ROOT / "local_data" / "yahoo_gspc_2000_2020_close.csv")
-    output_root = Path(output_root)
-    for folder in ["results", "charts"]: (output_root / folder).mkdir(parents=True, exist_ok=True)
+def run(data_path=None, output_root=None):
+    """Run into a new directory; never replace the reviewed reference files."""
+    data_path = Path(data_path or ROOT / "local_data" / "yahoo_gspc_2000_2020_close.csv").resolve()
     frame = load_data(data_path)
     audit = audit_data(frame, data_path)
+    if output_root is None:
+        run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
+        output_root = ROOT / "runs" / run_id
+    output_root = Path(output_root).resolve()
+    output_root.mkdir(parents=True, exist_ok=False)
+    for folder in ("results", "charts"):
+        (output_root / folder).mkdir()
+    versions = {package: importlib.metadata.version(package) for package in
+                ["numpy", "pandas", "scipy", "statsmodels", "matplotlib", "exchange-calendars", "nbformat", "nbclient", "nbconvert", "ipykernel"]}
+    run_config = {
+        "status": "LATER_RECONSTRUCTION_RUN_NOT_ORIGINAL_COLLEGE_RESULTS",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "data_path": str(data_path), "data_sha256": audit["csv_sha256"],
+        "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                          for name in ("analysis.py", "evaluation.py")},
+        "train_end": TRAIN_END, "test_start": TEST_START, "horizons_sessions": list(HORIZONS),
+        "arima_order": [1, 1, 1], "arima_trend": "n", "parameters_refitted": False,
+        "primary_comparison": "Next-session RMSE: frozen ARIMA(1,1,1) versus last close",
+        "bootstrap": {"method": "paired circular moving blocks", "block_sessions": [5, 20, 60],
+                      "replicates": 2000, "seed": 20261117, "interval": "percentile 95%"},
+        "forecast_failure_rule": "Abort the run; do not drop a task from one model only",
+        "prediction_interval": "Statsmodels model-based nominal 95%, fixed training parameters",
+        "python": platform.python_version(), "packages": versions,
+    }
+    write_json(output_root / "run_config.json", run_config)
     print(f"Validated {len(frame):,} daily observations and calendar coverage.", flush=True)
     train_frame = frame.loc[:TRAIN_END]
     train = train_frame.Close.to_numpy()
@@ -323,13 +364,16 @@ def run(data_path=None, output_root=ROOT):
     fixed, rolling, drift = make_forecasts(frame, fit)
     print("Fixed-origin and rolling forecasts completed without leakage assertions failing.", flush=True)
     metrics = calculate_metrics(fixed, rolling)
+    ledger = forecast_ledger(fixed, rolling, frame, drift, TRAIN_END)
+    one_step_check = paired_one_step_check(ledger, metrics)
+    bootstrap = block_bootstrap_rmse_gain(rolling)
     for name, data in [("fixed_origin_forecasts", fixed), ("rolling_forecasts", rolling), ("metrics", metrics)]:
         data.to_csv(output_root / "results" / f"{name}.csv", index=False)
+    ledger.to_csv(output_root / "results" / "forecast_ledger.csv", index=False)
+    bootstrap.to_csv(output_root / "results" / "one_step_block_bootstrap.csv", index=False)
     annual = make_charts(frame, fixed, rolling, metrics, train, residual, output_root)
     # Retain the chart-ready EDA data for the local academic presentation.
     frame.assign(Return_pct=frame.Close.pct_change() * 100).to_csv(output_root / "results" / "history_chart_data.csv")
-    versions = {package: importlib.metadata.version(package) for package in
-                ["numpy", "pandas", "scipy", "statsmodels", "matplotlib", "exchange-calendars", "nbformat", "nbclient", "nbconvert", "ipykernel"]}
     result = {
         "status": "EXECUTED_NEW_RECONSTRUCTION_NOT_ORIGINAL_COLLEGE_RESULTS",
         "data_audit": audit, "target": "Daily ^GSPC Close in index points; not total return",
@@ -343,6 +387,15 @@ def run(data_path=None, output_root=ROOT):
                   "horizon_units": "Observed trading sessions, not calendar days",
                   "drift_baseline_points_per_session": drift},
         "diagnostics": diagnostic, "metrics": metrics.where(pd.notna(metrics), None).to_dict("records"),
+        "evaluation_audit": {
+            "forecast_ledger": "Every model shares the same origin, target, horizon and actual within a task",
+            "one_session_independent_recomputation": one_step_check,
+            "primary_effect": "Naive RMSE minus frozen ARIMA RMSE, next-session close, index points",
+            "primary_rmse_gain_points": (one_step_check["Naive"]["rmse_points"] -
+                                         one_step_check["ARIMA(1,1,1)"]["rmse_points"]),
+            "block_bootstrap": bootstrap.to_dict("records"),
+            "block_bootstrap_scope": "Exploratory paired circular-block percentile intervals; historical test outcomes already known; block-length sensitivity, not a universal superiority test",
+        },
         "limitations": ["New reconstruction; original data, notebook, fitted coefficients and forecast protocol were not supplied.",
                         "Current Yahoo historical vintage, not verified contemporaneous point-in-time data.",
                         "No independent cross-provider value verification; calendar checked against XNYS proxy.",
@@ -352,7 +405,8 @@ def run(data_path=None, output_root=ROOT):
                         "No exogenous/LLM/GARCH/ML forecaster was fitted; suggested extensions are untested.",
                         "No open raw-data redistribution licence verified; keep local_data and detailed chart/forecast extracts private."],
         "validation": {"chronological_forecast_assertions": "Passed", "frozen_parameter_assertions": "Passed",
-                       "independent_scalar_error_recomputation": "Passed", "calendar_reconciliation": "Passed",
+                       "independent_scalar_error_recomputation": "Passed", "ledger_alignment_audit": "Passed",
+                       "calendar_reconciliation": "Passed",
                        "python": platform.python_version(), "packages": versions},
     }
     # Pandas numeric columns keep NaN when replacing with None; convert via JSON.
@@ -376,14 +430,16 @@ def run(data_path=None, output_root=ROOT):
     }
     write_json(output_root / "results" / "deck_data.json", deck_data)
     (output_root / "results" / "model_summary.txt").write_text(str(fit.summary()), encoding="utf-8")
-    (output_root / "requirements.txt").write_text("\n".join(f"{key}=={value}" for key, value in versions.items()) + "\n", encoding="utf-8")
+    result["run_directory"] = str(output_root)
     return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=None)
+    parser.add_argument("--output-dir", type=Path, default=None,
+                        help="New, nonexistent run directory; default is a unique directory under runs/")
     args = parser.parse_args()
-    result = run(args.data)
+    result = run(args.data, args.output_dir)
     print(pd.DataFrame(result["metrics"])[["protocol", "horizon_sessions", "model", "n", "mae_points", "rmse_points", "rmse_improvement_vs_naive_pct"]].to_string(index=False))
-    print("Saved results, diagnostics, and charts under", ROOT)
+    print("Saved results, diagnostics, and charts under", result["run_directory"])

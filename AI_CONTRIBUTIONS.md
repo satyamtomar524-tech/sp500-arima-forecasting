@@ -4,7 +4,9 @@ This repository is a later, AI-assisted reconstruction created on 14 October 202
 
 AI helped frame the reconstruction's research question and evaluation protocol, generate and review Python and notebook code, draft explanations, and check reproducibility and publication boundaries. Satyam requested and reviewed the later reconstruction. Python, Pandas, and Statsmodels performed the data checks, model fitting, forecasting, and metric calculations; no LLM produced the numerical forecasts.
 
-The ARIMA(1,1,1) order was inherited from the supplied project material and prespecified for this reconstruction. It was not selected through a test-period search. No exogenous model, GARCH model, machine-learning forecaster, trading simulation, statistical-superiority claim, or profitability claim is included.
+On 17 November 2026, Satyam supplied an AI-written technical review and asked Codex to implement its project improvements. Codex added safer per-run outputs, a row-level forecast audit, interval-quality measures, a paired block-bootstrap sensitivity check, tests, a beginner learning page, and a separate retrospective 20-session-refit experiment. These are changes to the **later reconstruction**, not recovered work from the original group presentation. A learning checkpoint is an invitation for Satyam to answer; it is not evidence that he has already completed it.
+
+The ARIMA(1,1,1) order was inherited from the supplied project material and prespecified for this reconstruction. It was not selected through a test-period search. The later 20-session refit experiment uses the same order and the already-known 2014–2020 outcomes; it is exploratory. No exogenous model, GARCH model, machine-learning forecaster, trading simulation, statistical-superiority claim, or profitability claim is included.
 
 Raw historical closes, detailed forecasts containing actual prices, plot arrays, and executed notebook outputs are excluded because redistribution rights were not verified. Only source code, explanatory text, and aggregate metrics are public.
 

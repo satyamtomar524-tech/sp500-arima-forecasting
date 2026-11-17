@@ -1,10 +1,15 @@
 .venv/
 __pycache__/
+.ruff_cache/
 .ipynb_checkpoints/
 local_data/
 charts/
 results/*
 !results/metrics.csv
+runs/
+tmp/pdfs/
+tmp/ipython/
+tmp/jupyter_runtime/
 *.html
 *.pdf
 *.pptx
